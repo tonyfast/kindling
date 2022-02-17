@@ -1,9 +1,10 @@
+from ctypes import Union
 from typing import Any, List
 from doit import task_params
 from doit.tools import create_folder, CmdAction
 from contextlib import suppress
 from pathlib import Path
-from shutil import rmtree
+from shutil import rmtree, copyfile
 from pydantic import BaseModel, Field
 
 # doit tasks
@@ -30,6 +31,13 @@ def task_new(name):
     )
     yield dict(name="git", actions=["git init"], uptodate=[Path(".git").exists()])
     INIT, MAIN = Path("src", name, "__init__.py"), Path("src", name, "__main__.py")
+    yield dict(
+        name="nox",
+        actions=[(lambda *x: copyfile(*x) and True, [THIS / NOX, NOX])],
+        targets=[NOX],
+        uptodate=[NOX.exists()],
+        clean=True,
+    )
     yield dict(
         name="python",
         actions=[(write, [INIT, ""]), (write, [MAIN, ""])],
@@ -75,7 +83,7 @@ DOIT_CONFIG = dict(default_tasks=["new"])
 
 # files
 HERE = Path().resolve()
-THIS = Path(__file__)
+THIS = Path(__file__).parent
 README = Path("README.md")
 SETUPCFG = Path("setup.cfg")
 CONFIG = Path("docs", "_config.yml")
@@ -87,8 +95,7 @@ BUILD = Path("_build")
 CONF = DOCS / "conf.py"
 CONFIG = DOCS / "_config.yml"
 HTML = BUILD / "html"
-README = Path("README.md")
-
+NOX = Path("noxfile.py")
 
 # default configurations
 
@@ -287,6 +294,52 @@ class notebook(Json):
                 ),
             ]
         )
+
+
+class step(Model):
+    name: str
+
+
+class action(step):
+    uses: str
+    __annotations__.update({"with": dict})
+    locals().update({"with": Field(default_factory=dict)})
+
+
+class run(step):
+    run: str
+
+
+class workflow(Model):
+    class job(Model):
+
+        steps: List[step]
+        __annotations__.update({"runs-on": str})
+        locals().update({"runs-on": "ubuntu-latest"})
+
+    on: dict
+    jobs: List[job]
+
+
+class steps:
+    python = action(
+        name="setup python", uses="actions/setup-python@v2", **{"with": {"python-version": 3.9}}
+    )
+    upgrade = run(
+        name="upgrade build dependencies",
+        run=f"python -m pip install --upgrade pip build setuptools wheel",
+    )
+
+    checkout = action(
+        name="fetch all history and tags",
+        uses="actions/checkout@v2",
+        **{"with": {"fetch-depth": 0}},
+    )
+
+    test = run(name="test within nox", run="nox -s test")
+
+    def install(x):
+        return workflow(name="install dependencies", run=f"python -m pip install {x}")
 
 
 # utilities
