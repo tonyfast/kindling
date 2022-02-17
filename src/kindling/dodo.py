@@ -1,10 +1,9 @@
-from ctypes import Union
-from typing import Any, List
-from doit import task_params
-from doit.tools import create_folder, CmdAction
 from contextlib import suppress
 from pathlib import Path
-from shutil import rmtree, copyfile
+from typing import Any, Dict, List, Union
+
+from doit import task_params
+from doit.tools import CmdAction, create_folder
 from pydantic import BaseModel, Field
 
 # doit tasks
@@ -29,11 +28,13 @@ def task_new(name):
         uptodate=[GITIGNORE.exists()],
         clean=True,
     )
+    yield release.task(name)
+    yield test.task(name)
     yield dict(name="git", actions=["git init"], uptodate=[Path(".git").exists()])
     INIT, MAIN = Path("src", name, "__init__.py"), Path("src", name, "__main__.py")
     yield dict(
         name="nox",
-        actions=[(lambda *x: copyfile(*x) and True, [THIS / NOX, NOX])],
+        actions=[(copyfile, [THIS / NOX, NOX])],
         targets=[NOX],
         uptodate=[NOX.exists()],
         clean=True,
@@ -96,12 +97,12 @@ CONF = DOCS / "conf.py"
 CONFIG = DOCS / "_config.yml"
 HTML = BUILD / "html"
 NOX = Path("noxfile.py")
-
+WORKFLOWS = Path(".github", "workflows")
 # default configurations
 
 ISORT = dict(profile="black")
 BLACK = dict(line_length=100)
-PYTEST = dict(ini_options=dict(addopts=f"""--nbval --nbval-sanitize-with docs/santize.cfg"""))
+PYTEST = dict(ini_options=dict(addopts=f"""--nbval -pno:warnings"""))
 
 BUILD_SYSTEM = dict(
     requires=["setuptools>=45", "wheel", "setuptools_scm>=6.2"],
@@ -191,8 +192,8 @@ class Json(Model):
 
 class Cfg(Model):
     def dump(self):
-        from io import StringIO
         from configparser import ConfigParser
+        from io import StringIO
 
         parser = ConfigParser()
         parser.read_dict(self.dict())
@@ -271,6 +272,7 @@ class setupcfg(Cfg, file=SETUPCFG):
 class notebook(Json):
     nbformat: int = 4
     nbformat_minor: int = 5
+    metadata: dict = Field(default_factory=dict)
     cells: list = Field(default_factory=list)
 
     @classmethod
@@ -289,7 +291,7 @@ class notebook(Json):
                     cell_type="code",
                     metadata={},
                     execution_count=None,
-                    source=f"    import {name}",
+                    source=f"    import {name}\n    {name}",
                     outputs=[],
                 ),
             ]
@@ -310,26 +312,31 @@ class run(step):
     run: str
 
 
-class workflow(Model):
+class workflow(Json):
     class job(Model):
 
         steps: List[step]
+        strategy: dict = Field(default_factory=dict)
         __annotations__.update({"runs-on": str})
         locals().update({"runs-on": "ubuntu-latest"})
 
-    on: dict
-    jobs: List[job]
+    on: Union[list, dict]
+    jobs: Dict[str, job]
 
 
 class steps:
-    python = action(
-        name="setup python", uses="actions/setup-python@v2", **{"with": {"python-version": 3.9}}
-    )
-    upgrade = run(
-        name="upgrade build dependencies",
-        run=f"python -m pip install --upgrade pip build setuptools wheel",
-    )
+    def python(x=3.9):
+        return action(
+            name="setup python", uses="actions/setup-python@v2", **{"with": {"python-version": x}}
+        )
 
+    def upgrade(x="pip build setuptools wheel"):
+        return run(
+            name="upgrade dependencies",
+            run=f"python -m pip install --upgrade {x}",
+        )
+
+    build = run(name="build python", run="python -m build --sdist --wheel")
     checkout = action(
         name="fetch all history and tags",
         uses="actions/checkout@v2",
@@ -341,14 +348,86 @@ class steps:
     def install(x):
         return workflow(name="install dependencies", run=f"python -m pip install {x}")
 
+    def publish(user):
+        return action(
+            name="publish",
+            uses="pypa/gh-action-pypi-publish@master",
+            **{"with": dict(user=user, password="${{ secrets.pypi_password }}")},
+        )
+
+
+class release(workflow, file=WORKFLOWS / "release.yml"):
+    @classmethod
+    def object(cls, name):
+        return cls(
+            on=dict(release=dict(types=["created"])),
+            jobs=dict(
+                pypi=workflow.job(
+                    steps=[
+                        steps.python(),
+                        steps.checkout,
+                        steps.upgrade(),
+                        steps.build,
+                        steps.publish("docfast"),
+                    ]
+                )
+            ),
+        )
+
+
+class release(workflow, file=WORKFLOWS / "release.yml"):
+    @classmethod
+    def object(cls, name):
+        return cls(
+            on=dict(release=dict(types=["created"])),
+            jobs=dict(
+                pypi=workflow.job(
+                    strategy=dict(matrix={"python-version": [3.8, 3.9]}),
+                    steps=[
+                        steps.checkout,
+                        steps.python("${{ matrix.python-version}}"),
+                        steps.upgrade("pip nox"),
+                        steps.test,
+                    ],
+                )
+            ),
+        )
+
+
+class test(workflow, file=WORKFLOWS / "test.yml"):
+    @classmethod
+    def object(cls, name):
+        return cls(
+            on=["push"],
+            jobs=dict(
+                pypi=workflow.job(
+                    strategy=dict(matrix={"python-version": [3.8, 3.9]}),
+                    steps=[
+                        steps.checkout,
+                        steps.python("${{ matrix.python-version}}"),
+                        steps.upgrade("pip nox"),
+                        steps.test,
+                    ],
+                )
+            ),
+        )
+
 
 # utilities
 
 
 def remove(path):
+    from shutil import rmtree
+
     with suppress(FileNotFoundError):
         rmtree(path)
         print(f"removed {path}")
+
+
+def copyfile(*args, **kwargs):
+    from shutil import copyfile
+
+    copyfile(*args, **kwargs)
 
 
 def write(path, input):
