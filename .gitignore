@@ -1,0 +1,5 @@
+.doit.db*
+__pycache__
+_build
+src/kindling/_version.py
+*.egg-info
