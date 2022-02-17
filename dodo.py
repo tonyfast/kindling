@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from doit import create_after
 from doit.tools import CmdAction
 
@@ -10,6 +11,7 @@ def task_bootstrap():
 
     def deps():
         from textwrap import indent
+
         from configupdater import ConfigUpdater
 
         c = ConfigUpdater()
@@ -18,7 +20,7 @@ def task_bootstrap():
             c["options"]["install_requires"] = indent("\n".join(["", "pydantic", "doit"]), " " * 4)
             c.update_file()
 
-    from src.kindling.dodo import task_new, SETUPCFG
+    from src.kindling.dodo import SETUPCFG, task_new
 
     yield from task_new("kindling")
     yield dict(name="deps", actions=[deps], file_dep=[SETUPCFG], uptodate=[False])

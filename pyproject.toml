@@ -17,7 +17,7 @@ profile = "black"
 [tool.black]
 line_length = 100
 [tool.pytest.ini_options]
-addopts = "--nbval --nbval-sanitize-with docs/santize.cfg"
+addopts = "--nbval -pno:warnings"
 
 [build-system]
 requires = ["setuptools>=45", "wheel", "setuptools_scm>=6.2"]
