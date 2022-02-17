@@ -40,6 +40,13 @@ def task_new(name):
         clean=True,
     )
     yield dict(
+        name="nbval-sanitize",
+        actions=[(copyfile, [THIS / SANITIZE, DOCS / SANITIZE])],
+        targets=[SANITIZE],
+        uptodate=[SANITIZE.exists()],
+        clean=True,
+    )
+    yield dict(
         name="python",
         actions=[(write, [INIT, ""]), (write, [MAIN, ""])],
         targets=[INIT, MAIN],
@@ -98,11 +105,12 @@ CONFIG = DOCS / "_config.yml"
 HTML = BUILD / "html"
 NOX = Path("noxfile.py")
 WORKFLOWS = Path(".github", "workflows")
+SANITIZE = Path("sanitize.cfg")
 # default configurations
 
 ISORT = dict(profile="black")
 BLACK = dict(line_length=100)
-PYTEST = dict(ini_options=dict(addopts=f"""--nbval -pno:warnings"""))
+PYTEST = dict(ini_options=dict(addopts=f"""--nbval --sanitize-with docs/sanitize.cfg -pno:warnings"""))
 
 BUILD_SYSTEM = dict(
     requires=["setuptools>=45", "wheel", "setuptools_scm>=6.2"],
@@ -268,7 +276,7 @@ class setupcfg(Cfg, file=SETUPCFG):
     def object(cls, name):
         return cls(metadata=cls.Metadata(name=name), options=cls.Options())
 
-
+    
 class notebook(Json):
     nbformat: int = 4
     nbformat_minor: int = 5
