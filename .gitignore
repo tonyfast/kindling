@@ -1,5 +1,3 @@
-setup.cfg
-pyproject.toml
 .doit.db*
 __pycache__
 _build
