@@ -292,7 +292,7 @@ class notebook(Json):
                 dict(
                     cell_type="markdown",
                     metadata={},
-                    source="# {name} tests",
+                    source=f"# `{name}` tests",
                 ),
                 dict(
                     id=str(uuid1()),
