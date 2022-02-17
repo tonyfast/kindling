@@ -4,18 +4,93 @@ from doit.tools import create_folder, CmdAction
 from contextlib import suppress
 from pathlib import Path
 from shutil import rmtree
-import py
 from pydantic import BaseModel, Field
 
+# doit tasks
+
+
+@task_params([dict(name="name", short="n", long="name", default="sample", type=str)])
+def task_new(name):
+    """start a new project"""
+    yield pyproject.task(name)
+    yield setupcfg.task(name)
+    yield toc.task(name)
+    yield config.task(name)
+    TESTNB = DOCS / f"test_{name}.ipynb"
+
+    class nb(notebook, file=TESTNB):
+        pass
+
+    yield nb.task(name)
+    yield dict(
+        name="gitignore",
+        actions=[(write, (GITIGNORE, gitignores(name)))],
+        uptodate=[GITIGNORE.exists()],
+        clean=True,
+    )
+    yield dict(name="git", actions=["git init"], uptodate=[Path(".git").exists()])
+    INIT, MAIN = Path("src", name, "__init__.py"), Path("src", name, "__main__.py")
+    yield dict(
+        name="python",
+        actions=[(write, [INIT, ""]), (write, [MAIN, ""])],
+        targets=[INIT, MAIN],
+        uptodate=[INIT.exists(), MAIN.exists()],
+    )
+    yield dict(
+        name="readme",
+        actions=[f"echo # {name} > {README}"],
+        targets=[README],
+        uptodate=[README.exists()],
+        clean=True,
+    )
+
+
+def task_develop():
+    return dict(actions=["pip install -e."], file_dep=["pyproject.toml", "setup.cfg"])
+
+
+def task_docs():
+    def configure():
+        action = CmdAction(["jb", "config", "sphinx", "--config", str(CONFIG), "."])
+        action.execute()
+
+    yield dict(
+        name="config",
+        file_dep=[TOC, CONFIG],
+        actions=[configure],
+        clean=True,
+        targets=[CONF],
+    )
+    yield dict(
+        name="build",
+        file_dep=[README, CONF],
+        actions=[f"sphinx-build -c {DOCS} . {HTML}"],
+        clean=[(remove, [HTML])],
+    )
+
+
+# doit configuration
+
 DOIT_CONFIG = dict(default_tasks=["new"])
+
+# files
 HERE = Path().resolve()
-GITIGNORE = Path(".gitignore")
-SETUPTOOLS_SCM = lambda name: dict(
-    write_to=f"src/{name}/_version.py",
-    version_scheme="release-branch-semver",
-    local_scheme="node-and-timestamp",
-)
+THIS = Path(__file__)
 README = Path("README.md")
+SETUPCFG = Path("setup.cfg")
+CONFIG = Path("docs", "_config.yml")
+TOC = Path("_toc.yml")
+GITIGNORE = Path(".gitignore")
+PYPROJECT = Path("pyproject.toml")
+DOCS = Path("docs")
+BUILD = Path("_build")
+CONF = DOCS / "conf.py"
+CONFIG = DOCS / "_config.yml"
+HTML = BUILD / "html"
+README = Path("README.md")
+
+
+# default configurations
 
 ISORT = dict(profile="black")
 BLACK = dict(line_length=100)
@@ -37,13 +112,32 @@ nbval""",
 )
 
 
+def SETUPTOOLS_SCM(name):
+    return dict(
+        write_to=f"src/{name}/_version.py",
+        version_scheme="release-branch-semver",
+        local_scheme="node-and-timestamp",
+    )
+
+
+def gitignores(x):
+    return """.doit.db*
+__pycache__
+_build
+src/{name}/_version.py
+*.egg-info""".format(
+        name=x
+    )
+
+
+# kindling models
 class Model(BaseModel):
+    """base model for kindling that exports doit tasks on type creation"""
+
     @classmethod
     def task(cls, name):
         def write():
-            x = cls.object(name=name)
-            print(x)
-            x.write()
+            cls.object(name=name).write()
 
         return dict(
             name=cls.__name__,
@@ -85,7 +179,7 @@ class Json(Model):
     def dump(self):
         from json import dumps
 
-        return dumps(self.dict())
+        return dumps(self.dict(), indent=2)
 
 
 class Cfg(Model):
@@ -98,9 +192,6 @@ class Cfg(Model):
         text = StringIO()
         parser.write(text)
         return text.getvalue()
-
-
-PYPROJECT = Path("pyproject.toml")
 
 
 class pyproject(Toml, file=PYPROJECT):
@@ -123,13 +214,8 @@ class pyproject(Toml, file=PYPROJECT):
             )
         )
 
-    def dump(self):
-        from tomlkit import dumps
 
-        return dumps(self.dict())
-
-
-class toc(Json, file=Path("_toc.yml")):
+class toc(Json, file=TOC):
     format: str = "jb-book"
     root: str = "README.md"
     chapters: List = Field(default_factory=list)
@@ -139,16 +225,13 @@ class toc(Json, file=Path("_toc.yml")):
         return cls(chapters=[dict(file=f"docs/test_{name}.ipynb")])
 
 
-class config(Json, file=Path("docs", "_config.yml")):
+class config(Json, file=CONFIG):
     title: str
     execute: dict = Field(default_factory=dict(execute="off").copy)
 
     @classmethod
     def object(cls, name):
         return cls(title=name)
-
-
-SETUPCFG = Path("setup.cfg")
 
 
 class setupcfg(Cfg, file=SETUPCFG):
@@ -178,69 +261,35 @@ class setupcfg(Cfg, file=SETUPCFG):
         return cls(metadata=cls.Metadata(name=name), options=cls.Options())
 
 
-@task_params([dict(name="name", short="n", long="name", default="sample", type=str)])
-def task_new(name):
-    """start a new project"""
-    yield pyproject.task(name)
-    yield setupcfg.task(name)
-    yield toc.task(name)
-    yield config.task(name)
-    yield dict(
-        name="gitignore",
-        actions=[(write, (GITIGNORE, ignores(name)))],
-        uptodate=[GITIGNORE.exists()],
-        clean=True,
-    )
-    yield dict(name="git", actions=["git init"], uptodate=[Path(".git").exists()])
-    INIT, MAIN = Path("src", name, "__init__.py"), Path("src", name, "__main__.py")
-    yield dict(
-        name="python",
-        actions=[(write, [INIT, ""]), (write, [MAIN, ""])],
-        targets=[INIT, MAIN],
-        uptodate=[INIT.exists(), MAIN.exists()],
-    )
-    yield dict(
-        name="readme",
-        actions=[f"echo # {name} > {README}"],
-        targets=[README],
-        uptodate=[README.exists()],
-        clean=True,
-    )
+class notebook(Json):
+    nbformat: int = 4
+    nbformat_minor: int = 5
+    cells: list = Field(default_factory=list)
+
+    @classmethod
+    def object(cls, name):
+        from uuid import uuid1
+
+        return cls(
+            cells=[
+                dict(
+                    cell_type="markdown",
+                    metadata={},
+                    source="# {name} tests",
+                ),
+                dict(
+                    id=str(uuid1()),
+                    cell_type="code",
+                    metadata={},
+                    execution_count=None,
+                    source=f"    import {name}",
+                    outputs=[],
+                ),
+            ]
+        )
 
 
-def task_develop():
-    return dict(actions=["pip install -e."], file_dep=["pyproject.toml", "setup.cfg"])
-
-
-from pathlib import Path
-
-DOCS = Path("docs")
-BUILD = Path("_build")
-CONF = DOCS / "conf.py"
-TOC = "_toc.yml"
-CONFIG = DOCS / "_config.yml"
-HTML = BUILD / "html"
-README = Path("README.md")
-
-
-def task_docs():
-    def configure():
-        action = CmdAction(["jb", "config", "sphinx", "--config", str(CONFIG), "."])
-        action.execute()
-
-    yield dict(
-        name="config",
-        file_dep=[TOC, CONFIG],
-        actions=[configure],
-        clean=True,
-        targets=[CONF],
-    )
-    yield dict(
-        name="build",
-        file_dep=[README, CONF],
-        actions=[f"sphinx-build -c {DOCS} . {HTML}"],
-        clean=[(remove, [HTML])],
-    )
+# utilities
 
 
 def remove(path):
@@ -251,12 +300,3 @@ def remove(path):
 
 def write(path, input):
     Path(path).write_text(input)
-
-
-ignores = lambda x: """.doit.db*
-__pycache__
-_build
-src/{name}/_version.py
-*.egg-info""".format(
-    name=x
-)

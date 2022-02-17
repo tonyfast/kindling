@@ -1,0 +1,9 @@
+{
+  "format": "jb-book",
+  "root": "README.md",
+  "chapters": [
+    {
+      "file": "docs/test_kindling.ipynb"
+    }
+  ]
+}
