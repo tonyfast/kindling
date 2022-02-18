@@ -13,7 +13,7 @@
     }
   },
   "jobs": {
-    "pypi": {
+    "docs": {
       "steps": [
         {
           "name": "fetch all history and tags",

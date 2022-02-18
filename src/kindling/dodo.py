@@ -442,7 +442,7 @@ class docs(workflow, file=WORKFLOWS / "doc.yml"):
                 pull_request=dict(paths=["docs/**"]), push=dict(branches="main master".split())
             ),
             jobs=dict(
-                pypi=workflow.job(
+                docs=workflow.job(
                     steps=[
                         steps.checkout,
                         steps.python(),
