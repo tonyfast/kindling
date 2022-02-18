@@ -4,6 +4,12 @@
       "paths": [
         "docs/**"
       ]
+    },
+    "push": {
+      "branches": [
+        "main",
+        "master"
+      ]
     }
   },
   "jobs": {

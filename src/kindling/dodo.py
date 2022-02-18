@@ -438,7 +438,9 @@ class docs(workflow, file=WORKFLOWS / "doc.yml"):
     @classmethod
     def object(cls, name):
         return cls(
-            on=dict(pull_request=dict(paths=["docs/**"])),
+            on=dict(
+                pull_request=dict(paths=["docs/**"]), push=dict(branches="main master".split())
+            ),
             jobs=dict(
                 pypi=workflow.job(
                     steps=[
