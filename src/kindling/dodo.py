@@ -31,7 +31,8 @@ def task_new(name):
     yield release.task(name)
     yield test.task(name)
     yield dict(name="git", actions=["git init"], uptodate=[Path(".git").exists()])
-    INIT, MAIN = Path("src", name, "__init__.py"), Path("src", name, "__main__.py")
+    SRC = Path("src", name)
+    INIT, MAIN = SRC / "__init__.py", SRC / "__main__.py"
     yield dict(
         name="nox",
         actions=[(copyfile, [THIS / NOX, NOX])],
@@ -48,7 +49,7 @@ def task_new(name):
     )
     yield dict(
         name="python",
-        actions=[(write, [INIT, ""]), (write, [MAIN, ""])],
+        actions=[(create_folder, [SRC]), (write, [INIT, ""]), (write, [MAIN, ""])],
         targets=[INIT, MAIN],
         uptodate=[INIT.exists(), MAIN.exists()],
     )
