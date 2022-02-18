@@ -16,6 +16,7 @@ def test(session):
 
 
 @session(reuse_venv=REUSE)
-def docs(session):
+def doc(session):
     session.install("-e.[doc]")
-    session.run("jb", "--toc", str(TOC), "--config", str(CONFIG), str(HERE))
+    session.run("jb", "build", "--toc", str(TOC), "--config", str(CONFIG), *session.posargs, str(HERE))
+    session.run("touch", str(Path("_build", "html", ".nojekyll")), external=True)

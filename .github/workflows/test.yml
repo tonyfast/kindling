@@ -24,7 +24,7 @@
           "run": "python -m pip install --upgrade pip nox"
         },
         {
-          "name": "test within nox",
+          "name": "test with nox",
           "run": "nox -s test"
         }
       ],

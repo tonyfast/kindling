@@ -1,0 +1,58 @@
+{
+  "on": {
+    "pulls": {
+      "paths": [
+        "docs/**"
+      ]
+    }
+  },
+  "jobs": {
+    "pypi": {
+      "steps": [
+        {
+          "name": "fetch all history and tags",
+          "uses": "actions/checkout@v2",
+          "with": {
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "setup python",
+          "uses": "actions/setup-python@v2",
+          "with": {
+            "python-version": 3.9
+          }
+        },
+        {
+          "name": "upgrade dependencies",
+          "run": "python -m pip install --upgrade pip nox"
+        },
+        {
+          "name": "doc with nox",
+          "run": "nox -s doc"
+        },
+        {
+          "name": "deploy",
+          "uses": "JamesIves/github-pages-deploy-action@v4.2.2",
+          "with": {
+            "branch": "gh-pages",
+            "folder": "_build/html",
+            "target-folder": "${{ github.ref }}"
+          },
+          "if": "github.event_name == 'pull_request'"
+        },
+        {
+          "name": "deploy",
+          "uses": "JamesIves/github-pages-deploy-action@v4.2.2",
+          "with": {
+            "branch": "gh-pages",
+            "folder": "_build/html"
+          },
+          "if": "github.ref_name == 'main' ||  github.ref_name == 'master'"
+        }
+      ],
+      "strategy": {},
+      "runs-on": "ubuntu-latest"
+    }
+  }
+}

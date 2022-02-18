@@ -30,6 +30,7 @@ def task_new(name):
     )
     yield release.task(name)
     yield test.task(name)
+    yield docs.task(name)
     yield dict(name="git", actions=["git init"], uptodate=[Path(".git").exists()])
     SRC = Path("src", name)
     INIT, MAIN = SRC / "__init__.py", SRC / "__main__.py"
@@ -247,7 +248,8 @@ class toc(Json, file=TOC):
 class config(Json, file=CONFIG):
     title: str
     execute: dict = Field(default_factory=dict(execute="off").copy)
-
+    exclude_patterns: list = Field(default_factory=[".nox"].copy)
+    only_build_toc_files: bool = True
     @classmethod
     def object(cls, name):
         return cls(title=name)
@@ -317,6 +319,9 @@ class action(step):
     uses: str
     __annotations__.update({"with": dict})
     locals().update({"with": Field(default_factory=dict)})
+class caction(action):
+    __annotations__ = {}
+    __annotations__.update({"if": str})
 
 
 class run(step):
@@ -354,7 +359,8 @@ class steps:
         **{"with": {"fetch-depth": 0}},
     )
 
-    test = run(name="test within nox", run="nox -s test")
+    def nox(x):
+        return run(name=f"{x} with nox", run=f"nox -s {x}")
 
     def install(x):
         return workflow(name="install dependencies", run=f"python -m pip install {x}")
@@ -365,6 +371,26 @@ class steps:
             uses="pypa/gh-action-pypi-publish@master",
             **{"with": dict(user=user, password="${{ secrets.pypi_password }}")},
         )
+
+    pages_pull = caction(
+        name="deploy",
+        uses="JamesIves/github-pages-deploy-action@v4.2.2",
+        **{
+            "if": "github.event_name == 'pull_request'",
+            "with": dict(
+                branch="gh-pages", folder="_build/html", **{"target-folder": "${{ github.ref }}"}
+            ),
+        },
+    )
+
+    pages_main = caction(
+        name="deploy",
+        uses="JamesIves/github-pages-deploy-action@v4.2.2",
+        **{
+            "if": "github.ref_name == 'main' ||  github.ref_name == 'master'",
+            "with": dict(branch="gh-pages", folder="_build/html"),
+        },
+    )
 
 
 class release(workflow, file=WORKFLOWS / "release.yml"):
@@ -398,7 +424,27 @@ class test(workflow, file=WORKFLOWS / "test.yml"):
                         steps.checkout,
                         steps.python("${{ matrix.python-version}}"),
                         steps.upgrade("pip nox"),
-                        steps.test,
+                        steps.nox("test"),
+                    ],
+                )
+            ),
+        )
+
+
+class docs(workflow, file=WORKFLOWS / "doc.yml"):
+    @classmethod
+    def object(cls, name):
+        return cls(
+            on=dict(pulls=dict(paths=["docs/**"])),
+            jobs=dict(
+                pypi=workflow.job(
+                    steps=[
+                        steps.checkout,
+                        steps.python(),
+                        steps.upgrade("pip nox"),
+                        steps.nox("doc"),
+                        steps.pages_pull,
+                        steps.pages_main,
                     ],
                 )
             ),

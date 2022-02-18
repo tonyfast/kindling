@@ -2,5 +2,9 @@
   "title": "kindling",
   "execute": {
     "execute": "off"
-  }
+  },
+  "exclude_patterns": [
+    ".nox"
+  ],
+  "only_build_toc_files": true
 }
