@@ -250,6 +250,7 @@ class config(Json, file=CONFIG):
     execute: dict = Field(default_factory=dict(execute="off").copy)
     exclude_patterns: list = Field(default_factory=[".nox"].copy)
     only_build_toc_files: bool = True
+
     @classmethod
     def object(cls, name):
         return cls(title=name)
@@ -319,6 +320,8 @@ class action(step):
     uses: str
     __annotations__.update({"with": dict})
     locals().update({"with": Field(default_factory=dict)})
+
+
 class caction(action):
     __annotations__ = {}
     __annotations__.update({"if": str})
@@ -435,7 +438,7 @@ class docs(workflow, file=WORKFLOWS / "doc.yml"):
     @classmethod
     def object(cls, name):
         return cls(
-            on=dict(pulls=dict(paths=["docs/**"])),
+            on=dict(pull_request=dict(paths=["docs/**"])),
             jobs=dict(
                 pypi=workflow.job(
                     steps=[

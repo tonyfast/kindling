@@ -1,6 +1,6 @@
 {
   "on": {
-    "pulls": {
+    "pull_request": {
       "paths": [
         "docs/**"
       ]
